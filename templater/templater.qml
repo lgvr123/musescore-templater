@@ -11,12 +11,11 @@ import FileIO 3.0
 
 /**********************************************
 /*  1.0.0: Initial version
-
-** TODO reprendre les bonnes traductions de MS pour title, composer, ...
+/*  1.1.0: List of the files already exisitng starting with the same letter
 /**********************************************/
 MuseScore {
     menuPath: "Plugins." + qsTr("Templater")
-    version: "1.0.0"
+    version: "1.1.0"
     requiresScore: false
     description: qsTr("Create a new score based on exsiting template")
     pluginType: "dialog"
@@ -39,13 +38,6 @@ MuseScore {
         }
     }
 
-    Settings {
-        id: pathSettings
-        category: "application/paths"
-        property var myTemplates
-        property var myScores
-    }
-
     onRun: {
         // check MuseScore version
         if (mscoreMajorVersion < 3 || mscoreMajorVersion > 3) { // we should really never get here, but fail at the imports above already
@@ -64,9 +56,12 @@ MuseScore {
         var f = importFrom.text;
         console.log("Template folder: " + f);
         files.folder = f;
+        candidates.folder=exportTo.text;
 
         files.showDirs = false;
         files.showFiles = true;
+        candidates.showDirs = false;
+        candidates.showFiles = true;
 
     }
 
@@ -136,35 +131,94 @@ MuseScore {
 
                 Layout.bottomMargin: 20
 
-                TextField {
-                    Layout.preferredWidth: 200
-                    id: exportName
-                    text: ""
-                    selectByMouse: true
+                    TextField {
+                        Layout.preferredWidth: 200
+                        id: exportName
+                        text: ""
+                        selectByMouse: true
 
-                    states: [
-                        State {
-                            name: "error"
-                            PropertyChanges {
-                                target: exportName;
-                                color: "red"
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("The file %1 already exists").arg(fileDest.source)
+                        states: [
+                            State {
+                                name: "error"
+                                PropertyChanges {
+                                    target: exportName;
+                                    color: "red"
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("The file %1 already exists").arg(fileDest.source)
+                                }
+                            },
+                            State {
+                                name: "valid"
+                                PropertyChanges {
+                                    target: exportName;
+                                }
                             }
-                        },
-                        State {
-                            name: "valid"
-                            PropertyChanges {
-                                target: exportName;
+                        ]
+
+                        onTextChanged: {
+                            checkFileTimer.restart();
+                        }
+
+                        // Candidates filenames
+                        Popup {
+                            id: popup
+                            x: 0
+                            y: parent.implicitHeight
+                            width: 400
+                            height: Math.min(
+                                contentItem.implicitHeight, 
+                                parent.Window.height - topMargin - bottomMargin
+                                ,300)
+
+                            modal: false  
+                            focus: false // don't take the focus. Let the user keep on typing 
+                            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+                            
+                            background: Rectangle {
+                                color: sysActivePalette.window
+                            }
+
+                            contentItem: 
+                            ListView {
+                                model: candidates
+                                visible: true
+                                width: parent.width
+                                anchors.margins: 0
+                                anchors.fill: parent
+                                implicitHeight: contentHeight
+                                clip: true
+
+                                Rectangle {
+                                    z: 10
+                                    width: parent.width
+                                    height: parent.height
+                                    color: "transparent"
+                                    border.color: sysActivePalette.mid
+                                }
+                                
+                                delegate: ItemDelegate {
+                                    text: fileName
+                                    width: parent.width
+                                    
+                                    property var fileExt: getFileSuffix(fileName)
+                                    
+                                    font.italic: fileExt!=="mscz"
+
+                                
+                                    // palette.text: (fileExt==="mscz")?sysActivePalette.text:sysActivePalette.mid
+                                    
+                                    onClicked: {
+                                        exportName.text = fileBaseName;
+                                        popup.close();
+                                    }
+                                }
                             }
                         }
-                    ]
 
-                    onTextChanged: {
-                        checkFileTimer.restart();
+
                     }
-                }
-
+                    
+                
                 TextField {
                     Layout.preferredWidth: 300
                     id: exportTo
@@ -253,8 +307,7 @@ MuseScore {
                 buttonColor: sysActivePalette.mid
                 buttonDownColor: sysActivePalette.shadow
             }
-
-        }
+        }// GroupLayout
         Item {
             Layout.alignment: Qt.AlignBottom | Qt.AlignLeft
             Layout.fillWidth: true
@@ -274,7 +327,7 @@ MuseScore {
 
                 Button {
                     id: ok
-                    enabled: (exportName.text !== "") && (files.currentIndex !== 0)
+                    enabled: (exportName.text !== "") && (lstModels.currentIndex !== -1)
                     text: qsTr("Create")
                     onClicked: {
                         work();
@@ -291,7 +344,8 @@ MuseScore {
             } // RowLayout
         } // Item
     } // ColumnLayout
-    // remember settings
+    
+    // Plugin settings
     Settings {
         id: settings
         category: "TemplaterPlugin"
@@ -303,6 +357,15 @@ MuseScore {
         property alias lyricist: lyricist.text
         property alias copyright: copyright.text
     }
+    
+    // MuseScore default values
+    Settings {
+        id: pathSettings
+        category: "application/paths"
+        property var myTemplates
+        property var myScores
+    }
+
 
     FileDialog {
         id: sourceFolderDialog
@@ -319,6 +382,22 @@ MuseScore {
         }
 
     } // sourceFolderDialog
+
+    FileDialog {
+        id: targetFolderDialog
+        title: qsTr("Choose Destination Folder")
+        selectFolder: true
+        folder: Qt.resolvedUrl(exportTo.text);
+
+        onAccepted: {
+            exportTo.text = targetFolderDialog.folder.toString();
+            candidates.folder = exportTo.text;
+        }
+
+        onRejected: {
+            console.log("No target folder selected")
+        }
+    } // targetFolderDialog
 
     FileIO {
         id: fileDest
@@ -337,20 +416,25 @@ MuseScore {
 
     }
 
-    FileDialog {
-        id: targetFolderDialog
-        title: qsTr("Choose Destination Folder")
-        selectFolder: true
-        folder: Qt.resolvedUrl(exportTo.text);
+    // FolderListModel for the models 
+    FolderListModel {
+        id: files
+        nameFilters: ["*.mscz"]
+    }
 
-        onAccepted: {
-            exportTo.text = targetFolderDialog.folder.toString();
+    // FolderListModel for the candidate targets 
+    FolderListModel {
+        id: candidates
+        nameFilters: { {
+                var similar = exportName.text;
+                if (!exportName.text.endsWith(".mscx") && !exportName.text.endsWith(".mscz")) {
+                    similar = similar + "*.*";
+                }
+                console.log("==> " + similar);
+                return [similar];
+            }
         }
-
-        onRejected: {
-            console.log("No target folder selected")
-        }
-    } // targetFolderDialog
+    }
 
     function urlToPath(urlString) {
         var s;
@@ -376,12 +460,6 @@ MuseScore {
         colorGroup: SystemPalette.Disabled
     }
 
-    // FolderListModel can be used to search the file system
-    FolderListModel {
-        id: files
-        nameFilters: ["*.mscz"]
-    }
-
     function buildExportPath(dest, tag, value, missing) {
         if (!value || value.trim() === "") {
             if (missing) {
@@ -397,8 +475,11 @@ MuseScore {
 
     // work
     function work() {
+        if (lstModels.currentIndex==-1) return;
+        if (!exportName.text) return;
+        
         var source = files.get(lstModels.currentIndex, "filePath");
-
+        
         var dest = fileDest.source;
         var ext = getFileSuffix(dest);
         dest = dest.substring(0, dest.length - ext.length - 1);
@@ -479,6 +560,9 @@ MuseScore {
 
     }
 
+    // Timer for target file name entry.
+    // - test for unicity
+    // - list file names similar to what has been typed
     Timer {
         id: checkFileTimer
         interval: 10 // 10ms
@@ -486,12 +570,34 @@ MuseScore {
         running: false
 
         onTriggered: {
+            // - check for unicity
             var valid = !fileDest.exists();
             console.log("Filename is valid ? " + valid);
             exportName.state = valid ? "valid" : "error";
-        }
 
+            // - list the similar file names
+            var show = false;
+            if (exportName.text !== lastCandidate) {
+                if (exportName.text !== "") {
+                    if (candidates.count === 0)
+                        show = false;
+                    else if ((candidates.count === 1)
+                         && (candidates.get(0, "fileBaseName") === exportName.text))
+                        show = false;
+                    else
+                        show = true;
+                }
+            }
+            if (show)
+                popup.open();
+            else
+                popup.close();
+
+            lastCandidate = exportName.text;
+        }
     }
+
+    property var lastCandidate: ""
 
     function getFileSuffix(fileName) {
 
