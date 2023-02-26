@@ -3,7 +3,7 @@ import QtQuick.Controls 2.2
 import QtQuick.Layouts 1.3
 
 /**
- * 1.0.0 Version initiale tirée de TapTempo
+ * 1.0.0 Version initiale (tirée de TapTempo et séparation en TapTempoBox et TempoUnitBox)
  */
 
 RowLayout {
@@ -21,20 +21,15 @@ RowLayout {
 
     // returned values
     property var tempoText: { {
-            console.log("mult: " + tempomult);
-            console.log("tempo: " + tempo);
-            var settings = multipliers.find(function (e) {
-                return e.mult === tempomult
-            });
+            var settings = lstMult.unitText;
 
             if (settings == undefined || tempo <= 0) {
                 return null;
             }
 
-            return settings.sym + ' = ' + tempo;
+            return lstMult.unitText + ' = ' + tempo;
         }
     }
-
     property var tempoValue: { {
             return tempo * tempomult;
         }
@@ -44,115 +39,24 @@ RowLayout {
     readonly property int averageOn: 5
     property var lastclicks: []
     property var tempo: -1
-    property var tempomult: 1
+    property alias tempomult: lstMult.unitDuration
 
     property var tempoElement
 
     property var curSegment
 
-    property var multipliers: [
-        //mult is a tempo-multiplier compared to a crotchet
-        {
-            text: '\uECA2',
-            mult: 4,
-            sym: '<sym>metNoteWhole</sym>'
-        }, // 1/1
-        {
-            text: '\uECA3 \uECB7',
-            mult: 3,
-            sym: '<sym>metNoteHalfUp</sym><sym>metAugmentationDot</sym>'
-        }, // 1/2.
-        {
-            text: '\uECA3',
-            mult: 2,
-            sym: '<sym>metNoteHalfUp</sym>'
-        }, // 1/2
-        {
-            text: '\uECA5 \uECB7 \uECB7',
-            mult: 1.75,
-            sym: '<sym>metNoteQuarterUp</sym><sym>metAugmentationDot</sym><sym>metAugmentationDot</sym>'
-        }, // 1/4..
-        {
-            text: '\uECA5 \uECB7',
-            mult: 1.5,
-            sym: '<sym>metNoteQuarterUp</sym><sym>metAugmentationDot</sym>'
-        }, // 1/4.
-        {
-            text: '\uECA5',
-            mult: 1,
-            sym: '<sym>metNoteQuarterUp</sym>'
-        }, // 1/4
-        {
-            text: '\uECA7 \uECB7 \uECB7',
-            mult: 0.875,
-            sym: '<sym>metNote8thUp</sym><sym>metAugmentationDot</sym><sym>metAugmentationDot</sym>'
-        }, // 1/8..
-        {
-            text: '\uECA7 \uECB7',
-            mult: 0.75,
-            sym: '<sym>metNote8thUp</sym><sym>metAugmentationDot</sym>'
-        }, // 1/8.
-        {
-            text: '\uECA7',
-            mult: 0.5,
-            sym: '<sym>metNote8thUp</sym>'
-        }, // 1/8
-        {
-            text: '\uECA9 \uECB7 \uECB7',
-            mult: 0.4375,
-            sym: '<sym>metNote16thUp</sym><sym>metAugmentationDot</sym><sym>metAugmentationDot</sym>'
-        }, //1/16..
-        {
-            text: '\uECA9 \uECB7',
-            mult: 0.375,
-            sym: '<sym>metNote16thUp</sym><sym>metAugmentationDot</sym>'
-        }, //1/16.
-        {
-            text: '\uECA9',
-            mult: 0.25,
-            sym: '<sym>metNote16thUp</sym>'
-        }, //1/16
-    ]
 
     // Components
-    ComboBox {
+    TempoUnitBox {
         id: lstMult
-        model: multipliers
 
-        textRole: "text"
-
-        // property var valueRole: "mult"
-        property var comboValue: "mult"
-
-        onActivated: {
-            // loopMode = currentValue;
-            tempomult = model[currentIndex][comboValue];
-            console.log(tempomult);
-        }
-
-        Binding on currentIndex {
-            value: multipliers.map(function (e) {
-                return e[lstMult.comboValue]
-            }).indexOf(tempomult);
-        }
+        sizeMult: control.sizeMult
 
         implicitHeight: 40*sizeMult
         implicitWidth: 90
 
-        font.family: 'MScore Text'
-        font.pointSize: 10*sizeMult
-
-        delegate: ItemDelegate {
-            contentItem: Text {
-                text: modelData[lstMult.textRole]
-                verticalAlignment: Text.AlignVCenter
-                font: lstMult.font
-            }
-            highlighted: multipliers.highlightedIndex === index
-
-        }
-
     }
+
     SpinBox {
         id: txtTempo
         Layout.preferredHeight: 40*sizeMult
