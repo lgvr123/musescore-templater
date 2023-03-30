@@ -3,7 +3,17 @@ import QtQuick.Controls 2.2
 import QtQuick.Layouts 1.3
 
 /**
+ * Exposed properties:
+ * - tempo: the tempo value by unitDuration	[ReadWrite]
+ * - unitDuration: the base duration selected (4 for a whole, 1 for a quarter, ...)  [ReadWrite]
+ * - tempoText: a representation with Symbols of the selected tempo [ReadOnly]
+ * - tempoValue: Quarter-based tempo value  [ReadOnly]
+ * - unitFractionDenum: the denumerator of the fraction to use for durations [ReadOnly]
+ *
+ * Versions history
  * 1.0.0 Version initiale (tirée de TapTempo et séparation en TapTempoBox et TempoUnitBox)
+ * 1.0.1 Nouvelle approche du Binding
+ * 1.0.1 New setBeatBaseFromMarking function
  */
 
 RowLayout {
@@ -19,8 +29,12 @@ RowLayout {
     property var buttonColor: "#21be2b"
     property var buttonDownColor: "#17a81a"
 
+    // input properties
+    property alias tempoMult: lstMult.unitDuration
+    property var tempo: -1
+
     // returned values
-    property var tempoText: { {
+    readonly property var tempoText: { {
             var settings = lstMult.unitText;
 
             if (settings == undefined || tempo <= 0) {
@@ -30,16 +44,21 @@ RowLayout {
             return lstMult.unitText + ' = ' + tempo;
         }
     }
-    property var tempoValue: { {
-            return tempo * tempomult;
+    readonly property var tempoValue: { {
+            return tempo * tempoMult;
+        }
+    }
+
+    onTempoChanged: {
+        //the tempo property changed from an external property set => we propagate this to the SpinBox
+        if (!txtTempo._inOnActivated) {
+            txtTempo.value=tempo;
         }
     }
 
     // inner data
     readonly property int averageOn: 5
     property var lastclicks: []
-    property var tempo: -1
-    property alias tempomult: lstMult.unitDuration
 
     property var tempoElement
 
@@ -49,6 +68,7 @@ RowLayout {
     // Components
     TempoUnitBox {
         id: lstMult
+        unitDuration: 1
 
         sizeMult: control.sizeMult
 
@@ -81,10 +101,12 @@ RowLayout {
             return val;
         }
 
-        onValueChanged: tempo = value // triggers a Binding loop but without it manual modifications are not reported to the tempo variable
+        property var _inOnActivated: false
 
-            Binding on value {
-            value: tempo
+        onValueChanged: {
+            _inOnActivated=true;
+            tempo = value;
+            _inOnActivated=false;
         }
 
         validator: IntValidator {
@@ -128,5 +150,56 @@ RowLayout {
 
         }
     }
+
+	/// Analyses tempo marking text to attempt to discover the base beat being used
+	/// If a beat is NOT detected, it does nothing
+	function setBeatBaseFromMarking(tempoMarking) {
+	    // First look for metronome marking symbols
+		var foundTempoText=tempoMarking.text.replace('<sym>space</sym>', '');
+	    var foundMetronomeSymbols = foundTempoText.match(/(<sym>met.*<\/sym>)+/g);
+
+	    // strip html tags and split around '='
+		var data = foundTempoText.replace(/<.*?>/g,'').split('=');
+		var tempo=parseInt(data[1]);
+		if (isNaN(tempo)) tempo=0;
+
+
+	    if (foundMetronomeSymbols !== null) {
+            // Locate the index in our dropdown matching the found beatString
+            for( var i = lstMult.multipliers.rowCount(); --i>=0 ; ) {
+	            if (lstMult.multipliers.get(i).sym == foundMetronomeSymbols[0]) {
+	                // Found this marking in the dropdown at metronomeMarkIndex
+	                return {multiplier: lstMult.multipliers.get(i).mult, tempo: tempo};
+	            }
+            }
+	    } else {
+	        // Metronome marking symbols are substituted with their character entity if the text was edited
+	        // UTF-16 range [\uECA0 - \uECB6] (double whole - 1024th)
+	        for (var beatString, charidx = 0; charidx < foundTempoText.length; charidx++) {
+	            beatString = foundTempoText[charidx];
+	            if ((beatString >= "\uECA2") && (beatString <= "\uECA9")) {
+	                // Found base tempo - continue looking for augmentation dots
+	                while (++charidx < foundTempoText.length) {
+	                    if (foundTempoText[charidx] == "\uECB7") {
+	                        beatString += " \uECB7";
+	                    } else if (foundTempoText[charidx] != ' ') {
+	                        break; // No longer augmentation dots or spaces
+	                    }
+	                }
+	                // Locate the index in our dropdown matching the found beatString
+
+                    for( var i = lstMult.multipliers.rowCount(); --i>=0 ; ) {
+                        if (lstMult.multipliers.get(i).text == beatString) {
+                                    // Found this marking in the dropdown at metronomeMarkIndex
+                            return {multiplier: lstMult.multipliers.get(i).mult, tempo: tempo};
+                        }
+                    }
+	                break; // Done processing base tempo
+	            }
+	        }
+	    }
+	    return {multiplier: -1, tempo: tempo};
+	}
+
 
 }

@@ -11,7 +11,8 @@ import FileIO 3.0
 
 /**********************************************
 /*  1.0.0: Initial version
-/*  1.1.0: List of the files already exisitng starting with the same letter
+/*  1.1.0: List of the files already exisitng starting with the same letter	
+/*  1.1.0: Settings for the TapTempoBox
 /**********************************************/
 MuseScore {
     menuPath: "Plugins." + qsTr("Templater")
@@ -356,6 +357,8 @@ MuseScore {
         property alias composer: composer.text
         property alias lyricist: lyricist.text
         property alias copyright: copyright.text
+        property alias tempoValue: tapTempo.tempo
+        property alias tempoMult: tapTempo.tempoMult
     }
     
     // MuseScore default values
